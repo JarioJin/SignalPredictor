@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import random
 import os
 
-_signal_type = 1
+_signal_type = 0
 _data_dir = 'signal-rec'
 
 _sample_rate = 100
@@ -102,7 +102,7 @@ class SignalProvider(object):
                 np.random.shuffle(self._index_arr)
             self._fetch_id = 0
 
-        return x_, y_
+        return x_, y_, self._fetch_id
 
     def evaluate_length(self):
         return len(self._evaluate_dat) - 100
@@ -111,6 +111,12 @@ class SignalProvider(object):
         return self._evaluate_dat[0:100]
 
     def evaluate(self, predicted):
+        '''
+        e, = plt.plot(predicted, label='signal_e')
+        g, = plt.plot(self._evaluate_dat[100:], label='signal_gt')
+        plt.legend([e, g], ['predicted', 'gt'])
+        plt.show()
+        '''
         # calculate root mean square error
         return np.sqrt(((predicted - self._evaluate_dat[100:]) ** 2).mean(axis=0))
 
