@@ -15,7 +15,7 @@ def dynamic_rnn_model(input_steps, true_steps, params):
     net = tf.contrib.layers.fully_connected(input_steps, params.rnn_hidden)
     net, _ = tf.nn.dynamic_rnn(cell_fw, net, dtype=tf.float32)
 
-    net = tf.reshape(net, [-1, params.rnn_predict_steps * params.rnn_hidden])
+    net = tf.reshape(net, [-1, params.rnn_input_steps * params.rnn_hidden])
     net = tf.contrib.layers.fully_connected(net, params.rnn_predict_steps, None)
     return net
 

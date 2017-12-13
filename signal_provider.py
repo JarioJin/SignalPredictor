@@ -78,6 +78,10 @@ class SignalProvider(object):
             self._x, self._y = generate_data(f1, input_steps, predict_steps)
             self._x = np.squeeze(self._x)
             self._y = np.squeeze(self._y)
+            if self._x.ndim == 1:
+                self._x = np.expand_dims(self._x, -1)
+            if self._y.ndim == 1:
+                self._y = np.expand_dims(self._y, -1)
             self._evaluate_dat = f2
             np.savez(self._signal_fn, x=self._x, y=self._y, eval=self._evaluate_dat)
 

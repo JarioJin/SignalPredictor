@@ -70,6 +70,7 @@ class SignalPredictor(object):
                 print("[INFO] after {} training steps, loss is {}, "
                       "time elapse {}".format(epoch, loss_avg / i, time.clock() - time_s))
                 i = 0
+                loss_avg = 0
                 time_s = time.clock()
 
         saver.save(self._sess, os.path.join(self._model_dir, "spnn_i{}p{}h{}l{}.ckpt".format(
@@ -116,7 +117,7 @@ def train_once(param1):
 
 
 if __name__ == '__main__':
-    params = [5, 10, 15, 20, 25, 30]
+    params = [1, 2, 5, 10, 20, 30]
     res = np.zeros((len(params), 1), dtype=np.float32)
     p = 0
     for i in range(len(params)):
