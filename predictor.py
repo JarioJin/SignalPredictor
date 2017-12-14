@@ -8,7 +8,7 @@ import time
 import os
 from signal_provider import SignalProvider
 from hyper_parameter import HyperParameter
-from models import dynamic_rnn_model
+from models import dynamic_rnn_model, seq2seq_model
 
 
 class SignalPredictor(object):
@@ -17,7 +17,6 @@ class SignalPredictor(object):
         self._input_steps = params.rnn_input_steps
         self._predict_steps = params.rnn_predict_steps
         self._hidden = params.rnn_hidden
-        self._layers = params.rnn_layers
         self._train_epoch = params.rnn_train_epoch
         self._model_dir = params.rnn_model_dir
         if not os.path.exists(self._model_dir):
@@ -26,19 +25,25 @@ class SignalPredictor(object):
         self._data_provider = SignalProvider(self._batch_size,
                                              input_steps=self._input_steps, predict_steps=self._predict_steps)
 
-        self._input_X = tf.placeholder(tf.float32, [None, self._input_steps])
-        self._truth_Y = tf.placeholder(tf.float32, [None, self._predict_steps])
-        self._input_Cs = tf.placeholder(tf.float32, [self._layers, self._batch_size, self._hidden])
-        self._input_Hs = tf.placeholder(tf.float32, [self._layers, self._batch_size, self._hidden])
+        self._input_X = tf.placeholder(tf.float32, [self._batch_size, self._input_steps])
+        self._truth_Y = tf.placeholder(tf.float32, [self._batch_size, self._predict_steps])
+        self._X = tf.placeholder(tf.float32, [None, self._input_steps])
 
-        self._predict = dynamic_rnn_model(self._input_X, self._truth_Y, params)
+        with tf.name_scope("train"):
+            with tf.variable_scope("spnn", reuse=None):
+                self._trained_Y = dynamic_rnn_model(self._input_X, True, params)
+                # self._trained_Y = seq2seq_model(self._input_X, True, params)
+        with tf.name_scope("eval"):
+            with tf.variable_scope("spnn", reuse=True):
+                self._predict = dynamic_rnn_model(self._X, False, params)
+                # self._predict = seq2seq_model(self._X, False, params)
 
         self._loss = self._get_loss()
         self._train_step = self._get_train_step()
         self._sess = tf.InteractiveSession()
 
     def _get_loss(self):
-        loss = tf.losses.absolute_difference(self._predict, self._truth_Y)
+        loss = tf.losses.absolute_difference(self._trained_Y, self._truth_Y)
         return loss
 
     def _get_train_step(self):
@@ -60,7 +65,7 @@ class SignalPredictor(object):
         while epoch < self._train_epoch:
             x, y, nid = self._data_provider.get_next_batch()
 
-            p, loss, _ = self._sess.run([self._predict, self._loss, self._train_step],
+            p, loss, _ = self._sess.run([self._trained_Y, self._loss, self._train_step],
                                         feed_dict={self._input_X: x, self._truth_Y: y})
             loss_avg += loss
             i += 1
@@ -73,15 +78,15 @@ class SignalPredictor(object):
                 loss_avg = 0
                 time_s = time.clock()
 
-        saver.save(self._sess, os.path.join(self._model_dir, "spnn_i{}p{}h{}l{}.ckpt".format(
-            self._input_steps, self._predict_steps, self._hidden, self._layers
+        saver.save(self._sess, os.path.join(self._model_dir, "spnn_si{}so{}dp{}.ckpt".format(
+            self._input_steps, self._predict_steps, self._hidden
         )))
         coord.request_stop()
         coord.join(threads)
 
     def load_model(self):
-        model_fn = os.path.join(self._model_dir, "spnn_i{}p{}h{}l{}.ckpt".format(
-            self._input_steps, self._predict_steps, self._hidden, self._layers
+        model_fn = os.path.join(self._model_dir, "spnn_si{}so{}dp{}.ckpt".format(
+            self._input_steps, self._predict_steps, self._hidden
         ))
         saver = tf.train.Saver()
         saver.restore(self._sess, model_fn)
@@ -97,8 +102,8 @@ class SignalPredictor(object):
             x = predicted[len(predicted) - self._input_steps:]
             x = np.expand_dims(x, axis=0)
             y = self._sess.run(self._predict,
-                               feed_dict={self._input_X: x})
-            y = np.squeeze(y)
+                               feed_dict={self._X: x})
+            y = np.squeeze(y, axis=0)
             predicted = np.concatenate((predicted, y), axis=0)
 
         predicted = predicted[init_len: init_len + predicted_len]
