@@ -36,7 +36,7 @@ class SignalPredictor(object):
         with tf.name_scope("eval"):
             with tf.variable_scope("spnn", reuse=True):
                 # self._predict = dynamic_rnn_model(self._X, False, params)
-                self._predict = seq2seq_model(self._X, False, params)
+                self._predict, _ = seq2seq_model(self._X, False, params)
 
         self._loss = self._get_loss()
         self._train_step = self._get_train_step()
@@ -110,6 +110,17 @@ class SignalPredictor(object):
         return self._data_provider.evaluate(predicted)
 
 
+def evaluate_once(param1):
+    tf.reset_default_graph()
+    with tf.device('/cpu:0'):
+        params = HyperParameter()
+        params.rnn_predict_steps = param1
+        sp = SignalPredictor(params)
+        sp.load_model()
+        rmse = sp.evaluate()
+    return rmse
+
+
 def train_once(param1):
     tf.reset_default_graph()
     with tf.device('/cpu:0'):
@@ -127,6 +138,7 @@ if __name__ == '__main__':
     p = 0
     for i in range(len(params)):
         rmse = train_once(params[i])
+        # rmse = evaluate_once(params[i])
         res[i] = rmse
         print(res)
     print(res)
