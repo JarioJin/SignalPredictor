@@ -31,12 +31,12 @@ class SignalPredictor(object):
 
         with tf.name_scope("train"):
             with tf.variable_scope("spnn", reuse=None):
-                self._trained_Y = dynamic_rnn_model(self._input_X, True, params)
-                # self._trained_Y = seq2seq_model(self._input_X, True, params)
+                # self._trained_Y = dynamic_rnn_model(self._input_X, True, params)
+                self._trained_Y, self._reg_loss = seq2seq_model(self._input_X, True, params)
         with tf.name_scope("eval"):
             with tf.variable_scope("spnn", reuse=True):
-                self._predict = dynamic_rnn_model(self._X, False, params)
-                # self._predict = seq2seq_model(self._X, False, params)
+                # self._predict = dynamic_rnn_model(self._X, False, params)
+                self._predict = seq2seq_model(self._X, False, params)
 
         self._loss = self._get_loss()
         self._train_step = self._get_train_step()
@@ -47,7 +47,7 @@ class SignalPredictor(object):
         return loss
 
     def _get_train_step(self):
-        train_step = tf.train.AdamOptimizer().minimize(self._loss)
+        train_step = tf.train.AdamOptimizer().minimize(self._loss + self._reg_loss)
         return train_step
 
     def train(self):
@@ -122,7 +122,7 @@ def train_once(param1):
 
 
 if __name__ == '__main__':
-    params = [1, 2, 5, 10, 20, 30]
+    params = [2, 5, 10, 20, 30]
     res = np.zeros((len(params), 1), dtype=np.float32)
     p = 0
     for i in range(len(params)):

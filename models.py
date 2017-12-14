@@ -38,7 +38,7 @@ def dynamic_rnn_model(input_steps, is_train, params):
     input_steps = tf.expand_dims(input_steps, -1)
 
     layer_size = [params.rnn_hidden for i in range(params.encoder_rnn_layers)]
-    rnn_layers = [tf.nn.rnn_cell.LSTMBlockCell(size) for size in layer_size]
+    rnn_layers = [tf.contrib.rnn.LSTMBlockCell(size) for size in layer_size]
     multi_rnn_cell = tf.nn.rnn_cell.MultiRNNCell(rnn_layers)
 
     rnn_out, rnn_state = tf.nn.dynamic_rnn(multi_rnn_cell, input_steps, dtype=tf.float32)
@@ -80,16 +80,15 @@ def convert_state_v1(h_state, params, seed, c_state=None, dropout=1.0):
         return squeeze(lower_inputs + upper_inputs)
 
 
-def rnn_decoder(encoder_state, prediction_inputs, previous_y, params):
+def rnn_decoder(encoder_state, previous_y, params):
     """
     :param encoder_state: shape [batch_size, encoder_rnn_depth]
-    :param prediction_inputs: features for prediction days, tensor[batch_size, time, input_depth]
-    :param previous_y: Last day pageviews, shape [batch_size]
+    :param previous_y: Last step value, shape [batch_size]
     :return: decoder rnn output
     """
     def build_cell(idx):
         with tf.variable_scope('decoder_cell'):
-            cell = tf.contrib.rnn.LSTMBlockCell(params.rnn_hidden)
+            cell = tf.contrib.rnn.GRUBlockCell(params.rnn_hidden)
             return cell
 
     if params.decoder_rnn_layers > 1:
@@ -98,12 +97,7 @@ def rnn_decoder(encoder_state, prediction_inputs, previous_y, params):
     else:
         cell = build_cell(0)
 
-    nest.assert_same_structure(encoder_state, cell.state_size)
     predict_steps = params.rnn_predict_steps
-    assert prediction_inputs.shape[1] == predict_steps
-
-    # [batch_size, time, input_depth] -> [time, batch_size, input_depth]
-    inputs_by_time = tf.transpose(prediction_inputs, [1, 0, 2])
 
     # Return raw outputs for RNN losses calculation
     return_raw_outputs = params.decoder_stability_loss > 0.0 or params.decoder_activation_loss > 0.0
@@ -119,18 +113,16 @@ def rnn_decoder(encoder_state, prediction_inputs, previous_y, params):
     def loop_fn(time, prev_output, prev_state, array_targets: tf.TensorArray, array_outputs: tf.TensorArray):
         """
         Main decoder loop
-        :param time: Day number
+        :param time: Step number
         :param prev_output: Output(prediction) from previous step
         :param prev_state: RNN state tensor from previous step
         :param array_targets: Predictions, each step will append new value to this array
         :param array_outputs: Raw RNN outputs (for regularization losses)
         :return:
         """
-        # RNN inputs for current step
-        features = inputs_by_time[time]
 
         # Append previous predicted value to input features
-        next_input = tf.concat([prev_output, features], axis=1)
+        next_input = prev_output
 
         # Run RNN cell
         output, state = cell(next_input, prev_state)
@@ -164,7 +156,7 @@ def seq2seq_model(input_steps, is_train, params):
     input_steps = tf.expand_dims(input_steps, -1)
 
     layer_size = [params.rnn_hidden for i in range(params.encoder_rnn_layers)]
-    rnn_layers = [tf.nn.rnn_cell.LSTMBlockCell(size) for size in layer_size]
+    rnn_layers = [tf.contrib.rnn.GRUBlockCell(size) for size in layer_size]
     multi_rnn_cell = tf.nn.rnn_cell.MultiRNNCell(rnn_layers)
 
     encoder_output, rnn_state = tf.nn.dynamic_rnn(multi_rnn_cell, input_steps, dtype=tf.float32)
@@ -172,13 +164,21 @@ def seq2seq_model(input_steps, is_train, params):
     enc_stab_loss = rnn_stability_loss(encoder_output, params.encoder_stability_loss / params.rnn_input_steps)
     enc_activation_loss = rnn_activation_loss(encoder_output, params.encoder_activation_loss / params.rnn_input_steps)
 
-    h_state = tf.stack([state.h for state in rnn_state])
+    # h_state = tf.stack([state.h for state in rnn_state])
+    h_state = tf.stack([state for state in rnn_state])
     encoder_state = convert_state_v1(h_state, params, None)
 
     # Run decoder
-    decoder_targets, decoder_outputs = rnn_decoder(encoder_state, time_y, norm_x[:, -1])
+    decoder_targets, decoder_outputs = rnn_decoder(encoder_state, tf.squeeze(input_steps[:, -1], axis=1), params)
 
-    return None
+    # Decoder activation losses
+    dec_stab_loss = rnn_stability_loss(decoder_outputs, params.decoder_stability_loss / params.rnn_predict_steps)
+    dec_activation_loss = rnn_activation_loss(decoder_outputs, params.decoder_activation_loss / params.rnn_predict_steps)
+
+    decoder_targets = tf.transpose(decoder_targets)
+
+    reg_loss = enc_stab_loss + enc_activation_loss + dec_stab_loss + dec_activation_loss
+    return decoder_targets, reg_loss
 
 
 
