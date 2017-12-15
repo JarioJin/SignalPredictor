@@ -109,6 +109,23 @@ class SignalPredictor(object):
         predicted = predicted[init_len: init_len + predicted_len]
         return self._data_provider.evaluate(predicted)
 
+    def evaluate_v2(self):
+        init_data = self._data_provider.evaluate_dat_v2()
+        init_len = init_data.shape[1]
+        assert init_len >= self._input_steps
+
+        predicted = []
+        for i in range(init_data.shape[0]):
+            x = init_data[i, init_len-self._input_steps:]
+            x = np.expand_dims(x, axis=0)
+            y = self._sess.run(self._predict,
+                               feed_dict={self._X: x})
+            y = np.squeeze(y, axis=0)
+            predicted.append(y[0])
+
+        predicted = np.array(predicted, dtype=np.float32)
+        return self._data_provider.evaluate(predicted)
+
 
 def evaluate_once(param1):
     tf.reset_default_graph()
@@ -117,7 +134,7 @@ def evaluate_once(param1):
         params.rnn_predict_steps = param1
         sp = SignalPredictor(params)
         sp.load_model()
-        rmse = sp.evaluate()
+        rmse = sp.evaluate_v2()
     return rmse
 
 
@@ -128,12 +145,12 @@ def train_once(param1):
         params.rnn_predict_steps = param1
         sp = SignalPredictor(params)
         sp.train()
-        rmse = sp.evaluate()
+        rmse = sp.evaluate_v2()
     return rmse
 
 
 if __name__ == '__main__':
-    params = [2, 5, 10, 20, 30]
+    params = [1,2,3,4,5,10,15,20]
     res = np.zeros((len(params), 1), dtype=np.float32)
     p = 0
     for i in range(len(params)):
