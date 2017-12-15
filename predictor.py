@@ -48,6 +48,7 @@ class SignalPredictor(object):
 
     def _get_train_step(self):
         train_step = tf.train.AdamOptimizer().minimize(self._loss + self._reg_loss)
+        # train_step = tf.train.AdamOptimizer().minimize(self._loss)
         return train_step
 
     def train(self):
@@ -131,7 +132,7 @@ def evaluate_once(param1):
     tf.reset_default_graph()
     with tf.device('/cpu:0'):
         params = HyperParameter()
-        params.rnn_predict_steps = param1
+        params.rnn_input_steps = param1
         sp = SignalPredictor(params)
         sp.load_model()
         rmse = sp.evaluate_v2()
@@ -150,7 +151,7 @@ def train_once(param1):
 
 
 if __name__ == '__main__':
-    params = [1,2,3,4,5,10,15,20]
+    params = [5, 10, 20, 40, 60, 80, 100]
     res = np.zeros((len(params), 1), dtype=np.float32)
     p = 0
     for i in range(len(params)):

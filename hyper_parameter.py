@@ -7,7 +7,7 @@ class HyperParameter(object):
         # rnn parameters
         self.rnn_batch_size = 32
         self.rnn_input_steps = 30
-        self.rnn_predict_steps = 20
+        self.rnn_predict_steps = 5
         self.rnn_hidden = 20
         self.rnn_train_epoch = 20
         self.rnn_model_dir = 'model'
