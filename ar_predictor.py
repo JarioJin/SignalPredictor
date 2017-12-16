@@ -15,7 +15,8 @@ def get_weight_variable(input_dim, output_dim, regularizer):
     shape = (input_dim, output_dim)
     # weights = tf.get_variable("weights", shape, initializer=tf.truncated_normal_initializer(stddev=0.1))
     weights = tf.get_variable("weights", shape, initializer=tf.contrib.layers.xavier_initializer())
-    if regularizer != None: tf.add_to_collection('reg_loss', regularizer(weights))
+    if regularizer is not None:
+        tf.add_to_collection('reg_loss', regularizer(weights))
     return weights
 
 
@@ -24,6 +25,8 @@ class ARSignalPredictor(object):
         self._batch_size = params.ar_batch_size
         self._input_steps = params.ar_input_steps
         self._predict_steps = params.ar_predict_steps
+        self._input_depth = params.ar_input_depth
+        self._predict_depth = params.ar_predict_depth
 
         self._train_epoch = params.ar_train_epoch
         self._model_dir = params.ar_model_dir
@@ -33,9 +36,9 @@ class ARSignalPredictor(object):
         self._data_provider = SignalProvider(self._batch_size,
                                              input_steps=self._input_steps, predict_steps=self._predict_steps)
 
-        self._input_X = tf.placeholder(tf.float32, [self._batch_size, self._input_steps])
-        self._truth_Y = tf.placeholder(tf.float32, [self._batch_size, self._predict_steps])
-        self._X = tf.placeholder(tf.float32, [None, self._input_steps])
+        self._input_X = tf.placeholder(tf.float32, [self._batch_size, self._input_steps, self._input_depth])
+        self._truth_Y = tf.placeholder(tf.float32, [self._batch_size, self._predict_steps, self._predict_depth])
+        self._X = tf.placeholder(tf.float32, [None, self._input_steps, self._input_depth])
 
         with tf.name_scope("train"):
             with tf.variable_scope("ar", reuse=None):
@@ -48,14 +51,15 @@ class ARSignalPredictor(object):
 
     def _graph(self, inputX, truthY, is_train):
         regularizer = tf.contrib.layers.l2_regularizer(0.0001)
-        input_dim = self._input_steps
-        output_dim = self._predict_steps
+        input_dim = self._input_steps * self._input_depth
+        output_dim = self._predict_steps * self._predict_depth
         weights = get_weight_variable(input_dim, output_dim, regularizer)
 
-        # targets = tf.reshape(inputX, [-1, input_dim])
+        targets = tf.reshape(inputX, [-1, input_dim])
         biases = tf.get_variable("biases", [self._predict_steps], initializer=tf.constant_initializer(0.0))
 
-        targets = tf.matmul(inputX, weights) + biases
+        targets = tf.matmul(targets, weights) + biases
+        targets = tf.reshape(targets, [-1, self._predict_steps, self._predict_depth])
 
         if is_train:
             loss = tf.losses.mean_squared_error(targets, truthY)
@@ -159,7 +163,7 @@ class ARSignalPredictorTF(object):
             reader, batch_size=self._batch_size, window_size=self._input_steps+self._predict_steps)
 
         self.ar = tf.contrib.timeseries.ARRegressor(
-            periodicities=2, input_window_size=self._input_steps, output_window_size=self._predict_steps,
+            periodicities=628, input_window_size=self._input_steps, output_window_size=self._predict_steps,
             num_features=1,
             loss=tf.contrib.timeseries.ARModel.NORMAL_LIKELIHOOD_LOSS)
 
@@ -177,7 +181,7 @@ class ARSignalPredictorTF(object):
         }
         reader = tf.contrib.timeseries.NumpyReader(data)
         input_fn = tf.contrib.timeseries.WholeDatasetInputFn(reader)
-        y = self.ar.evaluate(input_fn=input_fn, steps=self._predict_steps)
+        y = self.ar.evaluate(input_fn=input_fn, steps=1)
 
         (predictions,) = tuple(self.ar.predict(
             input_fn=tf.contrib.timeseries.predict_continuation_input_fn(
@@ -201,12 +205,19 @@ def train_once(param1):
         params.ar_input_steps = param1
         sp = ARSignalPredictor(params)
         sp.train()
-        rmse = sp.evaluate()
+        rmse = sp.evaluate_v2()
     return rmse
 
 
 if __name__ == '__main__':
-    a = ARSignalPredictorTF(HyperParameter())
-    a.train()
-    a.evaluate()
+    params = [5, 10, 20, 40, 60, 80, 100]
+    res = np.zeros((len(params), 1), dtype=np.float32)
+    p = 0
+    for i in range(len(params)):
+        rmse = train_once(params[i])
+        # rmse = evaluate_once(params[i])
+        res[i] = rmse
+        print(res)
+    print(res)
+
 

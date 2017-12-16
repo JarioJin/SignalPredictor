@@ -35,7 +35,7 @@ def rnn_activation_loss(rnn_output, beta):
 
 
 def dynamic_rnn_model(input_steps, is_train, params):
-    input_steps = tf.expand_dims(input_steps, -1)
+    # input_steps = tf.expand_dims(input_steps, -1)
 
     layer_size = [params.rnn_hidden for i in range(params.encoder_rnn_layers)]
     rnn_layers = [tf.contrib.rnn.LSTMBlockCell(size) for size in layer_size]
@@ -108,7 +108,7 @@ def rnn_decoder(encoder_state, previous_y, params):
 
     # FC projecting layer to get single predicted value from RNN output
     def project_output(tensor):
-        return tf.layers.dense(tensor, 1, name='decoder_output_proj')
+        return tf.layers.dense(tensor, params.rnn_predict_depth, name='decoder_output_proj')
 
     def loop_fn(time, prev_output, prev_state, array_targets: tf.TensorArray, array_outputs: tf.TensorArray):
         """
@@ -137,7 +137,7 @@ def rnn_decoder(encoder_state, previous_y, params):
 
     # Initial values for loop
     loop_init = [tf.constant(0, dtype=tf.int32),
-                 tf.expand_dims(previous_y, -1),
+                 previous_y,
                  encoder_state,
                  tf.TensorArray(dtype=tf.float32, size=predict_steps),
                  tf.TensorArray(dtype=tf.float32, size=predict_steps) if return_raw_outputs else tf.constant(0)]
@@ -147,13 +147,13 @@ def rnn_decoder(encoder_state, previous_y, params):
     # Get final tensors from buffer arrays
     targets = targets_ta.stack()
     # [time, batch_size, 1] -> [time, batch_size]
-    targets = tf.squeeze(targets, axis=-1)
+    # targets = tf.squeeze(targets, axis=-1)
     raw_outputs = outputs_ta.stack() if return_raw_outputs else None
     return targets, raw_outputs
 
 
 def seq2seq_model(input_steps, is_train, params):
-    input_steps = tf.expand_dims(input_steps, -1)
+    # input_steps = tf.expand_dims(input_steps, -1)
 
     layer_size = [params.rnn_hidden for i in range(params.encoder_rnn_layers)]
     rnn_layers = [tf.contrib.rnn.GRUBlockCell(size) for size in layer_size]
@@ -169,13 +169,13 @@ def seq2seq_model(input_steps, is_train, params):
     encoder_state = convert_state_v1(h_state, params, None)
 
     # Run decoder
-    decoder_targets, decoder_outputs = rnn_decoder(encoder_state, tf.squeeze(input_steps[:, -1], axis=1), params)
+    decoder_targets, decoder_outputs = rnn_decoder(encoder_state, input_steps[:, -1], params)
 
     # Decoder activation losses
     dec_stab_loss = rnn_stability_loss(decoder_outputs, params.decoder_stability_loss / params.rnn_predict_steps)
     dec_activation_loss = rnn_activation_loss(decoder_outputs, params.decoder_activation_loss / params.rnn_predict_steps)
 
-    decoder_targets = tf.transpose(decoder_targets)
+    decoder_targets = tf.transpose(decoder_targets, [1, 0, 2])
 
     reg_loss = enc_stab_loss + enc_activation_loss + dec_stab_loss + dec_activation_loss
     return decoder_targets, reg_loss

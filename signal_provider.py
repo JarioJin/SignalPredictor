@@ -57,7 +57,7 @@ def generate_data(seq, in_steps, out_steps):
 
 
 class SignalProvider(object):
-    def __init__(self, batch_size, sample_gap=1, shuffle=True, refresh_data=False, input_steps=20, predict_steps=20):
+    def __init__(self, batch_size=32, sample_gap=1, shuffle=True, refresh_data=False, input_steps=20, predict_steps=1):
         if not os.path.exists(_data_dir):
             os.mkdir(_data_dir)
         self._signal_fn = os.path.join(_data_dir, 'signal-t{}.npz'.format(_signal_type))
@@ -76,13 +76,9 @@ class SignalProvider(object):
         if refresh_data:
             f1, f2 = generate_signal()
             self._x, self._y = generate_data(f1, input_steps, predict_steps)
-            self._x = np.squeeze(self._x)
-            self._y = np.squeeze(self._y)
-            if self._x.ndim == 1:
-                self._x = np.expand_dims(self._x, -1)
-            if self._y.ndim == 1:
-                self._y = np.expand_dims(self._y, -1)
-            self._evaluate_dat = f2
+            self._x = np.swapaxes(self._x, 1, 2)
+            self._y = np.swapaxes(self._y, 1, 2)
+            self._evaluate_dat = np.expand_dims(f2, axis=-1)
             np.savez(self._signal_fn, x=self._x, y=self._y, eval=self._evaluate_dat)
 
         self._batch_size = batch_size
@@ -117,12 +113,12 @@ class SignalProvider(object):
         return self._evaluate_dat[0:self._prep_steps]
 
     def evaluate(self, predicted):
-        ''''''
+        '''
         e, = plt.plot(predicted, label='signal_e')
         g, = plt.plot(self._evaluate_dat[100:], label='signal_gt')
         plt.legend([e, g], ['predicted', 'gt'])
         plt.show()
-        ''''''
+        '''
         # calculate root mean square error
         return np.sqrt(((predicted - self._evaluate_dat[self._prep_steps:]) ** 2).mean(axis=0))
 
@@ -136,6 +132,8 @@ class SignalProvider(object):
 
 
 if __name__ == '__main__':
+    sp = SignalProvider()
+    print(sp.evaluate_dat_v2().shape)
     f1, f2 = generate_signal()
     plt.plot(f1, label='signal_gt')
     plt.show()

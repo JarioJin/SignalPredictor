@@ -16,6 +16,8 @@ class SignalPredictor(object):
         self._batch_size = params.rnn_batch_size
         self._input_steps = params.rnn_input_steps
         self._predict_steps = params.rnn_predict_steps
+        self._input_depth = params.rnn_input_depth
+        self._predict_depth = params.rnn_predict_depth
         self._hidden = params.rnn_hidden
         self._train_epoch = params.rnn_train_epoch
         self._model_dir = params.rnn_model_dir
@@ -25,9 +27,9 @@ class SignalPredictor(object):
         self._data_provider = SignalProvider(self._batch_size,
                                              input_steps=self._input_steps, predict_steps=self._predict_steps)
 
-        self._input_X = tf.placeholder(tf.float32, [self._batch_size, self._input_steps])
-        self._truth_Y = tf.placeholder(tf.float32, [self._batch_size, self._predict_steps])
-        self._X = tf.placeholder(tf.float32, [None, self._input_steps])
+        self._input_X = tf.placeholder(tf.float32, [self._batch_size, self._input_steps, self._input_depth])
+        self._truth_Y = tf.placeholder(tf.float32, [self._batch_size, self._predict_steps, self._predict_depth])
+        self._X = tf.placeholder(tf.float32, [None, self._input_steps, self._input_depth])
 
         with tf.name_scope("train"):
             with tf.variable_scope("spnn", reuse=None):
