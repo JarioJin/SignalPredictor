@@ -117,12 +117,12 @@ class SignalProvider(object):
         return self._evaluate_dat[0:self._prep_steps]
 
     def evaluate(self, predicted):
-        '''
+        ''''''
         e, = plt.plot(predicted, label='signal_e')
         g, = plt.plot(self._evaluate_dat[100:], label='signal_gt')
         plt.legend([e, g], ['predicted', 'gt'])
         plt.show()
-        '''
+        ''''''
         # calculate root mean square error
         return np.sqrt(((predicted - self._evaluate_dat[self._prep_steps:]) ** 2).mean(axis=0))
 

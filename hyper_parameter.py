@@ -20,3 +20,10 @@ class HyperParameter(object):
         self.encoder_rnn_layers = 1
         self.decoder_rnn_layers = 1
 
+        # ar parameters
+        self.ar_batch_size = 32
+        self.ar_input_steps = 4
+        self.ar_predict_steps = 1
+        self.ar_train_epoch = 20
+        self.ar_model_dir = 'model'
+
