@@ -105,39 +105,39 @@ class ARSignalPredictor(object):
         coord.request_stop()
         coord.join(threads)
 
-    def evaluate(self):
+    def evaluate_pn(self):
         init_data = self._data_provider.evaluate_dat()
-        init_len = len(init_data)
+        init_len = init_data.shape[1]
         assert init_len >= self._input_steps
 
         predicted = init_data
         predicted_len = self._data_provider.evaluate_length()
-        while len(predicted) < init_len + predicted_len:
-            x = predicted[len(predicted) - self._input_steps:]
-            x = np.expand_dims(x, axis=0)
+        while len(predicted[0]) < init_len + predicted_len:
+            x = predicted[:, len(predicted[0]) - self._input_steps:]
+            x = (x - self._data_provider.norm_mean) / self._data_provider.norm_std
             y = self._sess.run(self._predict,
                                feed_dict={self._X: x})
-            y = np.squeeze(y, axis=0)
-            predicted = np.concatenate((predicted, y), axis=0)
+            y = y*self._data_provider.norm_std + self._data_provider.norm_mean
+            predicted = np.concatenate((predicted, y), axis=1)
 
-        predicted = predicted[init_len: init_len + predicted_len]
+        predicted = predicted[:, init_len: init_len + predicted_len]
         return self._data_provider.evaluate(predicted)
 
-    def evaluate_v2(self):
+    def evaluate_p1(self):
         init_data = self._data_provider.evaluate_dat_v2()
-        init_len = init_data.shape[1]
+        init_len = init_data.shape[2]
         assert init_len >= self._input_steps
 
         predicted = []
-        for i in range(init_data.shape[0]):
-            x = init_data[i, init_len-self._input_steps:]
-            x = np.expand_dims(x, axis=0)
+        for i in range(init_data.shape[1]):
+            x = init_data[:, i, init_len-self._input_steps:]
+            x = (x - self._data_provider.norm_mean) / self._data_provider.norm_std
             y = self._sess.run(self._predict,
                                feed_dict={self._X: x})
-            y = np.squeeze(y, axis=0)
-            predicted.append(y[0])
+            y = y[:, 0]*self._data_provider.norm_std + self._data_provider.norm_mean
+            predicted.append(y)
 
-        predicted = np.array(predicted, dtype=np.float32)
+        predicted = np.stack(predicted, axis=1)  # np.array(predicted, dtype=np.float32)
         return self._data_provider.evaluate(predicted)
 
 
@@ -205,12 +205,12 @@ def train_once(param1):
         params.ar_input_steps = param1
         sp = ARSignalPredictor(params)
         sp.train()
-        rmse = sp.evaluate_v2()
+        rmse = sp.evaluate_pn()
     return rmse
 
 
 if __name__ == '__main__':
-    params = [5, 10, 20, 40, 60, 80, 100]
+    params = [10, 20]
     res = np.zeros((len(params), 1), dtype=np.float32)
     p = 0
     for i in range(len(params)):

@@ -11,7 +11,7 @@ class HyperParameter(object):
         self.rnn_input_depth = 1
         self.rnn_predict_depth = 1
         self.rnn_hidden = 20
-        self.rnn_train_epoch = 20
+        self.rnn_train_epoch = 1
         self.rnn_model_dir = 'model'
 
         self.encoder_stability_loss = 0.0
@@ -23,11 +23,11 @@ class HyperParameter(object):
         self.decoder_rnn_layers = 1
 
         # ar parameters
-        self.ar_batch_size = 32
+        self.ar_batch_size = 128
         self.ar_input_steps = 30
         self.ar_predict_steps = 1
         self.ar_input_depth = 1
         self.ar_predict_depth = 1
-        self.ar_train_epoch = 20
+        self.ar_train_epoch = 2
         self.ar_model_dir = 'model'
 
