@@ -8,7 +8,7 @@ import time
 import os
 from signal_provider import SignalProvider
 from hyper_parameter import HyperParameter
-from models import dynamic_rnn_model, seq2seq_model
+from models import dynamic_rnn_model, seq2seq_model, position_rnn_model
 
 
 class SignalPredictor(object):
@@ -31,21 +31,27 @@ class SignalPredictor(object):
         self._truth_Y = tf.placeholder(tf.float32, [self._batch_size, self._predict_steps, self._predict_depth])
         self._X = tf.placeholder(tf.float32, [None, self._input_steps, self._input_depth])
 
+        global_step = tf.train.get_or_create_global_step()
+        inc_step = tf.assign_add(global_step, 1)
+
         with tf.name_scope("train"):
             with tf.variable_scope("spnn", reuse=None):
                 # self._trained_Y = dynamic_rnn_model(self._input_X, True, params)
-                self._trained_Y, self._reg_loss = seq2seq_model(self._input_X, True, params)
+                self._trained_Y, self._reg_loss = position_rnn_model(self._input_X, True, params)
+                # self._trained_Y, self._reg_loss = seq2seq_model(self._input_X, True, params)
         with tf.name_scope("eval"):
             with tf.variable_scope("spnn", reuse=True):
                 # self._predict = dynamic_rnn_model(self._X, False, params)
-                self._predict, _ = seq2seq_model(self._X, False, params)
+                self._predict, _ = position_rnn_model(self._X, False, params)
+                # self._predict, _ = seq2seq_model(self._X, False, params)
 
         self._loss = self._get_loss()
         self._train_step = self._get_train_step()
         self._sess = tf.InteractiveSession()
 
     def _get_loss(self):
-        loss = tf.losses.absolute_difference(self._trained_Y, self._truth_Y)
+        # loss = tf.losses.absolute_difference(self._trained_Y, self._truth_Y)
+        loss = tf.losses.mean_squared_error(self._trained_Y, self._truth_Y)
         return loss
 
     def _get_train_step(self):
@@ -141,24 +147,27 @@ def evaluate_once(param1):
     return rmse
 
 
-def train_once(param1):
+def train_once(param1, param2):
     tf.reset_default_graph()
     with tf.device('/cpu:0'):
         params = HyperParameter()
-        params.rnn_predict_steps = param1
+        params.rnn_predict_steps = param2
+        params.rnn_input_steps = param1
         sp = SignalPredictor(params)
         sp.train()
-        rmse = sp.evaluate_pn()
+        rmse = sp.evaluate_p1()
     return rmse
 
 
 if __name__ == '__main__':
-    params = [5, 10, 20, 40, 60, 80, 100]
-    res = np.zeros((len(params), 1), dtype=np.float32)
+    params1 = [2, 3, 4, 5, 10, 20, 30, 40, 60, 100]
+    params2 = [1]
+    res = np.zeros((len(params1), len(params2)), dtype=np.float32)
     p = 0
-    for i in range(len(params)):
-        rmse = train_once(params[i])
-        # rmse = evaluate_once(params[i])
-        res[i] = rmse
-        print(res)
+    for i in range(len(params1)):
+        for j in range(len(params2)):
+            rmse = train_once(params1[i], params2[j])
+            # rmse = evaluate_once(params[i])
+            res[i, j] = rmse
+            print(res)
     print(res)

@@ -11,9 +11,10 @@ class HyperParameter(object):
         self.rnn_input_depth = 1
         self.rnn_predict_depth = 1
         self.rnn_hidden = 20
-        self.rnn_train_epoch = 1
+        self.rnn_train_epoch = 10
         self.rnn_model_dir = 'model'
 
+        self.encoder_dropout = 1.0
         self.encoder_stability_loss = 0.0
         self.encoder_activation_loss = 1e-05
         self.decoder_stability_loss = 0.0

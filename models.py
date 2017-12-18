@@ -4,7 +4,11 @@ from __future__ import division, print_function, absolute_import
 import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
+from functools import partial
 from tensorflow.python.util import nest
+
+
+CudaRNN = tf.contrib.cudnn_rnn.CudnnLSTM
 
 
 def rnn_stability_loss(rnn_output, beta):
@@ -34,6 +38,67 @@ def rnn_activation_loss(rnn_output, beta):
     return tf.nn.l2_loss(rnn_output) * beta
 
 
+def cuda_params_size(cuda_model_builder):
+    """
+    Calculates static parameter size for CUDA RNN
+    :param cuda_model_builder:
+    :return:
+    """
+    with tf.Graph().as_default():
+        cuda_model = cuda_model_builder()
+        params_size_t = cuda_model.params_size()
+        config = tf.ConfigProto(gpu_options=tf.GPUOptions(allow_growth=True))
+        with tf.Session(config=config) as sess:
+            result = sess.run(params_size_t)
+            return result
+
+
+def make_encoder(time_inputs, encoder_features_depth, is_train, params, transpose_output=True):
+    """
+    Builds encoder, using CUDA RNN
+    :param time_inputs: Input tensor, shape [batch, time, features]
+    :param encoder_features_depth: Static size for features dimension
+    :param is_train:
+    :param params:
+    :param transpose_output: Transform RNN output to batch-first shape
+    :return:
+    """
+
+    def build_rnn():
+        return CudaRNN(num_layers=params.encoder_rnn_layers, num_units=params.rnn_hidden,
+                       input_size=encoder_features_depth,
+                       direction='unidirectional',
+                       dropout=params.encoder_dropout if is_train else 0)
+
+    static_p_size = cuda_params_size(build_rnn)
+    cuda_model = build_rnn()
+    params_size_t = cuda_model.params_size()
+    with tf.control_dependencies([tf.assert_equal(params_size_t, [static_p_size])]):
+        cuda_params = tf.get_variable("cuda_rnn_params",
+                                      initializer=tf.random_uniform([static_p_size], minval=-0.05, maxval=0.05,
+                                                                    dtype=tf.float32)
+                                      )
+
+    def build_init_state():
+        batch_len = tf.shape(time_inputs)[0]
+        return tf.zeros([params.encoder_rnn_layers, batch_len, params.rnn_hidden], dtype=tf.float32)
+
+    input_h = build_init_state()
+
+    # [batch, time, features] -> [time, batch, features]
+    time_first = tf.transpose(time_inputs, [1, 0, 2])
+    rnn_time_input = time_first
+    model = partial(cuda_model, input_data=rnn_time_input, input_h=input_h, params=cuda_params)
+    if CudaRNN == tf.contrib.cudnn_rnn.CudnnLSTM:
+        rnn_out, rnn_state, c_state = model(input_c=build_init_state())
+    else:
+        rnn_out, rnn_state = model()
+        c_state = None
+    if transpose_output:
+        rnn_out = tf.transpose(rnn_out, [1, 0, 2])
+    return rnn_out, rnn_state, c_state
+
+
 def dynamic_rnn_model(input_steps, is_train, params):
     # input_steps = tf.expand_dims(input_steps, -1)
 
@@ -47,6 +112,30 @@ def dynamic_rnn_model(input_steps, is_train, params):
     # net = tf.reshape(net, [-1, params.rnn_input_steps * params.rnn_hidden])
     net = tf.contrib.layers.fully_connected(rnn_out, params.rnn_predict_steps, None)
     return net
+
+
+def position_rnn_model(input_steps, is_train, params):
+    input_vel = input_steps[:,1:] - input_steps[:,:-1]
+    paddings = tf.constant([[0,0], [1,0], [0,0]])
+    input_vel = tf.pad(input_vel, paddings, "CONSTANT")
+
+    inputs = tf.concat((input_steps, input_vel), axis=2)
+
+    layer_size = [params.rnn_hidden for i in range(params.encoder_rnn_layers)]
+    rnn_layers = [tf.contrib.rnn.LSTMBlockCell(size) for size in layer_size]
+    multi_rnn_cell = tf.nn.rnn_cell.MultiRNNCell(rnn_layers)
+
+    rnn_out, rnn_state = tf.nn.dynamic_rnn(multi_rnn_cell, inputs, dtype=tf.float32)
+    # Encoder activation losses
+    enc_stab_loss = rnn_stability_loss(rnn_out, params.encoder_stability_loss / params.rnn_input_steps)
+    enc_activation_loss = rnn_activation_loss(rnn_out, params.encoder_activation_loss / params.rnn_input_steps)
+
+    rnn_out = rnn_out[:,-1,:]
+    # net = tf.reshape(net, [-1, params.rnn_input_steps * params.rnn_hidden])
+    net = tf.contrib.layers.fully_connected(rnn_out, params.rnn_predict_steps, None)
+    net = tf.reshape(net, [-1, params.rnn_predict_steps, params.rnn_predict_depth])
+    reg_loss = enc_stab_loss + enc_activation_loss
+    return net, reg_loss
 
 
 def convert_state_v1(h_state, params, seed, c_state=None, dropout=1.0):
@@ -179,8 +268,5 @@ def seq2seq_model(input_steps, is_train, params):
 
     reg_loss = enc_stab_loss + enc_activation_loss + dec_stab_loss + dec_activation_loss
     return decoder_targets, reg_loss
-
-
-
 
 

@@ -173,10 +173,18 @@ if __name__ == '__main__':
     dat = sp.evaluate_dat_v2()
     predicted = dat[:,:,-1]
 
-    pv = predicted[:,:-1]-predicted[:,1:]
+    pv = predicted[:,1:]-predicted[:,:-1]
     p0 = np.zeros([pv.shape[0], 1, 1])
     pv = np.concatenate((p0, pv), axis=1)
-    # predicted += pv*0.05
+
+    pa = pv[:,1:]-pv[:,:-1]
+    pa = np.concatenate((p0, pa), axis=1)
+    # pa = (pa[:,:-1]+pa[:,1:]) / 2
+    # pa = np.concatenate((p0, pa), axis=1)
+    plt.plot(pa[2,], label='signal_gt')
+    plt.show()
+
+    predicted += pv
     print(sp.evaluate(predicted))
 
     # f1, f2 = generate_signal()
