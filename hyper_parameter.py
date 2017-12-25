@@ -6,12 +6,12 @@ class HyperParameter(object):
     def __init__(self):
         # rnn parameters
         self.rnn_batch_size = 32
-        self.rnn_input_steps = 30
-        self.rnn_predict_steps = 5
+        self.rnn_input_steps = 20
+        self.rnn_predict_steps = 1
         self.rnn_input_depth = 1
         self.rnn_predict_depth = 1
         self.rnn_hidden = 20
-        self.rnn_train_epoch = 10
+        self.rnn_train_epoch = 2
         self.rnn_model_dir = 'model'
 
         self.encoder_dropout = 1.0

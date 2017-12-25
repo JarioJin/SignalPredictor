@@ -6,9 +6,9 @@ import matplotlib.pyplot as plt
 import random
 import os
 
-_signal_type = 9
+_signal_type = 0
 _data_dir = 'signal-rec'
-_custom_data_fn = os.path.join(_data_dir, 'tracking_data_p.npz')
+_custom_data_fn = os.path.join(_data_dir, 'tracking_data.npz')
 
 _sample_rate = 100
 _training_times = 50
@@ -66,7 +66,7 @@ def generate_data(seq, in_steps, out_steps):
 
 class SignalProvider(object):
     def __init__(self, batch_size=32, custom_data=True, sample_gap=1, shuffle=True, refresh_data=False,
-                 input_steps=20, predict_steps=1):
+                 input_steps=20, predict_steps=1, predict_depth=1):
         if not os.path.exists(_data_dir):
             os.mkdir(_data_dir)
         if custom_data and _signal_type != 9:
@@ -74,6 +74,7 @@ class SignalProvider(object):
             print('[WARNING]: signal_type != 9, USE SELF GENERATE DATA!')
 
         self._signal_fn = os.path.join(_data_dir, 'signal-t{}.npz'.format(_signal_type))
+        self._predict_depth = predict_depth
 
         if os.path.isfile(self._signal_fn):
             data = np.load(self._signal_fn)
@@ -147,14 +148,14 @@ class SignalProvider(object):
         return self._evaluate_dat[:, 0:self._prep_steps]
 
     def evaluate(self, predicted):
-        '''
+        ''''''
         e, = plt.plot(predicted[0, :], label='signal_e')
         g, = plt.plot(self._evaluate_dat[0, self._prep_steps:], label='signal_gt')
         plt.legend([e, g], ['predicted', 'gt'])
         plt.show()
-        '''
+        ''''''
         # calculate root mean square error
-        return np.sqrt(((predicted - self._evaluate_dat[:, self._prep_steps:]) ** 2).mean())
+        return np.sqrt(((predicted - self._evaluate_dat[:, self._prep_steps:, :self._predict_depth]) ** 2).mean())
 
     def evaluate_dat_v2(self):
         l = self.evaluate_length()
@@ -171,20 +172,16 @@ class SignalProvider(object):
 if __name__ == '__main__':
     sp = SignalProvider()
     dat = sp.evaluate_dat_v2()
-    predicted = dat[:,:,-1]
+    dat = dat[:,:,-1]
 
-    pv = predicted[:,1:]-predicted[:,:-1]
-    p0 = np.zeros([pv.shape[0], 1, 1])
-    pv = np.concatenate((p0, pv), axis=1)
-
-    pa = pv[:,1:]-pv[:,:-1]
-    pa = np.concatenate((p0, pa), axis=1)
-    # pa = (pa[:,:-1]+pa[:,1:]) / 2
+    pv = dat[:,1:,:1]-dat[:,:-1,:1]
+    pv = np.concatenate((pv[:,:1,:], pv), axis=1)
+    predicted = dat[:,:,:1] + pv # +dat[:,:,1:2]+dat[:,:,2:3]
+    # pa = (pa[:,:-1]*0.1+pa[:,1:]*0.9)
     # pa = np.concatenate((p0, pa), axis=1)
-    plt.plot(pa[2,], label='signal_gt')
-    plt.show()
+    # plt.plot(dat[0,:,2], label='signal_gt')
+    # plt.show()
 
-    predicted += pv
     print(sp.evaluate(predicted))
 
     # f1, f2 = generate_signal()

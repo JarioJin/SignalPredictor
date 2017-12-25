@@ -8,7 +8,7 @@ import time
 import os
 from signal_provider import SignalProvider
 from hyper_parameter import HyperParameter
-from models import dynamic_rnn_model, seq2seq_model, position_rnn_model
+from models import dynamic_rnn_model, seq2seq_model, position_rnn_model, position_seq2seq_model
 
 
 class SignalPredictor(object):
@@ -36,13 +36,13 @@ class SignalPredictor(object):
 
         with tf.name_scope("train"):
             with tf.variable_scope("spnn", reuse=None):
-                # self._trained_Y = dynamic_rnn_model(self._input_X, True, params)
-                self._trained_Y, self._reg_loss = position_rnn_model(self._input_X, True, params)
+                self._trained_Y = dynamic_rnn_model(self._input_X, True, params)
+                # self._trained_Y, self._reg_loss = position_seq2seq_model(self._input_X, True, params)
                 # self._trained_Y, self._reg_loss = seq2seq_model(self._input_X, True, params)
         with tf.name_scope("eval"):
             with tf.variable_scope("spnn", reuse=True):
-                # self._predict = dynamic_rnn_model(self._X, False, params)
-                self._predict, _ = position_rnn_model(self._X, False, params)
+                self._predict = dynamic_rnn_model(self._X, False, params)
+                # self._predict, _ = position_seq2seq_model(self._X, False, params)
                 # self._predict, _ = seq2seq_model(self._X, False, params)
 
         self._loss = self._get_loss()
@@ -55,8 +55,8 @@ class SignalPredictor(object):
         return loss
 
     def _get_train_step(self):
-        train_step = tf.train.AdamOptimizer().minimize(self._loss + self._reg_loss)
-        # train_step = tf.train.AdamOptimizer().minimize(self._loss)
+        # train_step = tf.train.AdamOptimizer().minimize(self._loss + self._reg_loss)
+        train_step = tf.train.AdamOptimizer().minimize(self._loss)
         return train_step
 
     def train(self):
@@ -73,7 +73,7 @@ class SignalPredictor(object):
         loss_avg = 0
         while epoch < self._train_epoch:
             x, y, nid = self._data_provider.get_next_batch()
-
+            y = y[:,:,:self._predict_depth]
             p, loss, _ = self._sess.run([self._trained_Y, self._loss, self._train_step],
                                         feed_dict={self._input_X: x, self._truth_Y: y})
             loss_avg += loss
@@ -112,7 +112,8 @@ class SignalPredictor(object):
             x = (x - self._data_provider.norm_mean) / self._data_provider.norm_std
             y = self._sess.run(self._predict,
                                feed_dict={self._X: x})
-            y = y * self._data_provider.norm_std + self._data_provider.norm_mean
+            y = y * self._data_provider.norm_std[:self._predict_depth] + \
+                self._data_provider.norm_mean[:self._predict_depth]
             predicted = np.concatenate((predicted, y), axis=1)
 
         predicted = predicted[:, init_len: init_len + predicted_len]
@@ -129,7 +130,8 @@ class SignalPredictor(object):
             x = (x - self._data_provider.norm_mean) / self._data_provider.norm_std
             y = self._sess.run(self._predict,
                                feed_dict={self._X: x})
-            y = y[:, 0] * self._data_provider.norm_std + self._data_provider.norm_mean
+            y = y[:, 0] * self._data_provider.norm_std[:self._predict_depth] + \
+                self._data_provider.norm_mean[:self._predict_depth]
             predicted.append(y)
 
         predicted = np.stack(predicted, axis=1)
@@ -151,7 +153,7 @@ def train_once(param1, param2):
     tf.reset_default_graph()
     with tf.device('/cpu:0'):
         params = HyperParameter()
-        params.rnn_predict_steps = param2
+        params.rnn_hidden = param2
         params.rnn_input_steps = param1
         sp = SignalPredictor(params)
         sp.train()
@@ -160,8 +162,8 @@ def train_once(param1, param2):
 
 
 if __name__ == '__main__':
-    params1 = [2, 3, 4, 5, 10, 20, 30, 40, 60, 100]
-    params2 = [1]
+    params1 = [5]
+    params2 = [20]
     res = np.zeros((len(params1), len(params2)), dtype=np.float32)
     p = 0
     for i in range(len(params1)):
